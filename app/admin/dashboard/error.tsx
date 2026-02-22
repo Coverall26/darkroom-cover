@@ -1,0 +1,69 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRollbar } from "@rollbar/react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, RotateCcw, LogOut } from "lucide-react";
+
+/**
+ * Error boundary for the GP Dashboard (/admin/dashboard).
+ * Catches render errors in the primary admin screen and provides
+ * branded error UI with recovery options.
+ */
+export default function GPDashboardError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  const rollbar = useRollbar();
+
+  useEffect(() => {
+    if (rollbar) {
+      rollbar.error(error, {
+        context: "gp-dashboard",
+        digest: error.digest,
+      });
+    }
+  }, [error, rollbar]);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#0A1628] px-4">
+      <div className="max-w-md w-full text-center">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
+          <AlertTriangle className="h-8 w-8 text-red-400" />
+        </div>
+        <h2 className="text-2xl font-semibold text-white mb-3">
+          Dashboard Error
+        </h2>
+        <p className="text-gray-400 mb-2 text-sm">
+          Something went wrong while loading the dashboard.
+          This has been reported and our team is looking into it.
+        </p>
+        {error.digest && (
+          <p className="text-gray-500 text-xs mb-6 font-mono">
+            Error ID: {error.digest}
+          </p>
+        )}
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={reset}
+            className="w-full bg-[#0066FF] hover:bg-[#0052CC] text-white h-11"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reload Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full border-gray-600 text-gray-300 hover:bg-gray-800 h-11"
+            onClick={() => window.location.href = "/"}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Return to Home
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

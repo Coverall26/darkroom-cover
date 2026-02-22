@@ -1,0 +1,17 @@
+VERSION 1
+
+NODE endpoint
+SQL >
+    SELECT
+        event_name,
+        count() AS event_count
+    FROM server_events__v1
+    WHERE timestamp >= fromUnixTimestamp64Milli({{ Int64(since, required=true) }})
+    {% if defined(teamId) %}
+    AND teamId = {{ String(teamId) }}
+    {% end %}
+    {% if defined(orgId) %}
+    AND orgId = {{ String(orgId) }}
+    {% end %}
+    GROUP BY event_name
+    ORDER BY event_count DESC

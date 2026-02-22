@@ -1,0 +1,203 @@
+import { NextApiRequest, NextApiResponse } from "next";
+
+import { authOptions } from "@/lib/auth/auth-options";
+import { getServerSession } from "next-auth/next";
+
+import { sendDataroomViewerInvite } from "@/ee/features/dataroom-invitations/emails/lib/send-dataroom-viewer-invite";
+import { createVisitorMagicLink, INVITATION_MAGIC_LINK_EXPIRY_MINUTES } from "@/lib/auth/create-visitor-magic-link";
+import { errorhandler } from "@/lib/errorHandler";
+import prisma from "@/lib/prisma";
+import { CustomUser } from "@/lib/types";
+
+export default async function handle(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  if (req.method === "POST") {
+    const session = await getServerSession(req, res, authOptions);
+    if (!session) {
+      return res.status(401).end("Unauthorized");
+    }
+
+    const userId = (session.user as CustomUser).id;
+    const { teamId, id: dataroomId } = req.query as {
+      teamId: string;
+      id: string;
+    };
+
+    const { emails } = req.body as { emails: string[] };
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: "No emails provided" });
+    }
+
+    try {
+      const teamAccess = await prisma.userTeam.findUnique({
+        where: {
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
+          },
+        },
+      });
+
+      if (!teamAccess) {
+        return res.status(401).end("Unauthorized");
+      }
+
+      const dataroom = await prisma.dataroom.findUnique({
+        where: {
+          id: dataroomId,
+          teamId: teamId,
+        },
+      });
+
+      if (!dataroom) {
+        return res.status(404).json({ error: "Dataroom not found" });
+      }
+
+      const quickAddGroup = await prisma.viewerGroup.findFirst({
+        where: {
+          dataroomId: dataroomId,
+          isQuickAdd: true,
+        },
+        include: {
+          links: {
+            where: {
+              deletedAt: null,
+              isArchived: false,
+            },
+            select: {
+              id: true,
+              domainId: true,
+              domainSlug: true,
+              slug: true,
+            },
+            take: 1,
+          },
+        },
+      });
+
+      if (!quickAddGroup || !quickAddGroup.links || quickAddGroup.links.length === 0) {
+        return res.status(404).json({ error: "Quick Add group or link not found" });
+      }
+
+      const link = quickAddGroup.links[0];
+      const senderUser = session.user as CustomUser;
+      const senderEmail = senderUser.email || "support@fundroom.ai";
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "https://app.fundroom.ai";
+      
+      const normalizedEmails = emails.map((e) => e.trim().toLowerCase());
+
+      // First, add all emails to the link's allowList so they can access the dataroom
+      const currentAllowList = await prisma.link.findUnique({
+        where: { id: link.id },
+        select: { allowList: true },
+      });
+      
+      const newEmailsForAllowList = normalizedEmails.filter(
+        (email) => !(currentAllowList?.allowList || []).includes(email)
+      );
+      
+      if (newEmailsForAllowList.length > 0) {
+        await prisma.link.update({
+          where: { id: link.id },
+          data: {
+            allowList: [...(currentAllowList?.allowList || []), ...newEmailsForAllowList],
+          },
+        });
+      }
+
+      const results = await Promise.all(
+        normalizedEmails.map(async (email) => {
+          try {
+            // Create or find viewer
+            let viewer = await prisma.viewer.findFirst({
+              where: {
+                email: email,
+                teamId: teamId,
+              },
+            });
+
+            if (!viewer) {
+              viewer = await prisma.viewer.create({
+                data: {
+                  email: email,
+                  teamId: teamId,
+                  dataroomId: dataroomId,
+                },
+              });
+            }
+
+            // Add to Quick Add group if not already a member
+            const existingMembership = await prisma.viewerGroupMembership.findUnique({
+              where: {
+                viewerId_groupId: {
+                  viewerId: viewer.id,
+                  groupId: quickAddGroup.id,
+                },
+              },
+            });
+
+            if (!existingMembership) {
+              await prisma.viewerGroupMembership.create({
+                data: {
+                  viewerId: viewer.id,
+                  groupId: quickAddGroup.id,
+                },
+              });
+            }
+
+            // Create invitation record
+            await prisma.viewerInvitation.create({
+              data: {
+                viewerId: viewer.id,
+                linkId: link.id,
+                groupId: quickAddGroup.id,
+                invitedBy: senderEmail,
+                status: "SENT",
+              },
+            });
+
+            // Create a pre-authenticated magic link with 1-hour expiration
+            const magicLinkResult = await createVisitorMagicLink({
+              email: email,
+              linkId: link.id,
+              isDataroom: true,
+              baseUrl: baseUrl,
+              expiryMinutes: INVITATION_MAGIC_LINK_EXPIRY_MINUTES,
+            });
+
+            const invitationUrl = magicLinkResult?.magicLink || `${baseUrl}/view/${link.id}`;
+
+            await sendDataroomViewerInvite({
+              dataroomName: dataroom.name,
+              senderEmail: senderEmail,
+              to: email,
+              url: invitationUrl,
+            });
+
+            return { email, sent: true };
+          } catch (error) {
+            console.error(`Failed to send invite to ${email}:`, error);
+            return { email, sent: false, error: String(error) };
+          }
+        }),
+      );
+
+      const successful = results.filter((r) => r.sent).length;
+      const failed = results.filter((r) => !r.sent).length;
+
+      return res.status(200).json({
+        message: `${successful} invitation${successful !== 1 ? "s" : ""} sent${failed > 0 ? `, ${failed} failed` : ""}`,
+        results,
+      });
+    } catch (error) {
+      console.error("Quick Add invite error:", error);
+      errorhandler(error, res);
+    }
+  } else {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}

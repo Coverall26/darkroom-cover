@@ -1,0 +1,217 @@
+/**
+ * FundRoom AI SaaS Platform Configuration
+ *
+ * Central configuration for the multi-tenant SaaS platform.
+ * All domain routing, branding defaults, and platform identity live here.
+ *
+ * Domain Architecture:
+ *   - fundroom.ai              → Marketing website (external)
+ *   - app.fundroom.ai          → Main application (org signup/setup, visitor entrance)
+ *   - app.login.fundroom.ai    → Standard org login (front-end only, no admin backend)
+ *   - app.admin.fundroom.ai    → Admin-only login portal (must be admin to enter)
+ *   - *.custom-domain.com      → Tenant custom domains (datarooms, portals)
+ *
+ * Environment Variables:
+ *   - NEXT_PUBLIC_PLATFORM_DOMAIN      → "fundroom.ai" (override for dev/staging)
+ *   - NEXT_PUBLIC_APP_DOMAIN           → "app.fundroom.ai"
+ *   - NEXT_PUBLIC_LOGIN_DOMAIN         → "app.login.fundroom.ai"
+ *   - NEXT_PUBLIC_ADMIN_DOMAIN         → "app.admin.fundroom.ai"
+ *   - NEXT_PUBLIC_PLATFORM_NAME        → "FundRoom AI" (override)
+ *   - NEXT_PUBLIC_PLATFORM_SUPPORT_EMAIL → "support@fundroom.ai"
+ */
+
+// ---------------------------------------------------------------------------
+// Platform Identity
+// ---------------------------------------------------------------------------
+
+export const PLATFORM_NAME = process.env.NEXT_PUBLIC_PLATFORM_NAME || "FundRoom AI";
+export const PLATFORM_SHORT_NAME = "FundRoom";
+export const PLATFORM_DESCRIPTION =
+  "Secure investor portals, datarooms, and fundraising infrastructure for funds and startups.";
+export const PLATFORM_TAGLINE = "Connecting Capital and Opportunity.";
+
+// ---------------------------------------------------------------------------
+// Platform Domains
+// ---------------------------------------------------------------------------
+
+/** Root marketing domain — the company website */
+export const PLATFORM_DOMAIN =
+  process.env.NEXT_PUBLIC_PLATFORM_DOMAIN || "fundroom.ai";
+
+/** App domain — new org signup + setup wizard */
+export const APP_DOMAIN =
+  process.env.NEXT_PUBLIC_APP_DOMAIN || "app.fundroom.ai";
+
+/** Login domain — standard org login (front-end only, even for admins) */
+export const LOGIN_DOMAIN =
+  process.env.NEXT_PUBLIC_LOGIN_DOMAIN || "app.login.fundroom.ai";
+
+/** Admin domain — admin-only login portal (must be admin to enter) */
+export const ADMIN_DOMAIN =
+  process.env.NEXT_PUBLIC_ADMIN_DOMAIN || "app.admin.fundroom.ai";
+
+/** Full URLs for convenience */
+export const PLATFORM_URL = `https://${PLATFORM_DOMAIN}`;
+export const APP_URL = `https://${APP_DOMAIN}`;
+export const LOGIN_URL = `https://${LOGIN_DOMAIN}`;
+export const ADMIN_URL = `https://${ADMIN_DOMAIN}`;
+
+/**
+ * All domains that belong to the FundRoom AI platform itself.
+ * Requests from these hosts should NOT be treated as custom tenant domains.
+ */
+export const PLATFORM_DOMAINS = [
+  PLATFORM_DOMAIN,
+  APP_DOMAIN,
+  LOGIN_DOMAIN,
+  ADMIN_DOMAIN,
+  `www.${PLATFORM_DOMAIN}`,
+] as const;
+
+// ---------------------------------------------------------------------------
+// Platform Contact Info
+// ---------------------------------------------------------------------------
+
+export const PLATFORM_SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_EMAIL || "support@fundroom.ai";
+export const PLATFORM_SECURITY_EMAIL =
+  process.env.NEXT_PUBLIC_PLATFORM_SECURITY_EMAIL || "security@fundroom.ai";
+export const PLATFORM_NOREPLY_EMAIL =
+  process.env.NEXT_PUBLIC_PLATFORM_NOREPLY_EMAIL || "noreply@fundroom.ai";
+
+// ---------------------------------------------------------------------------
+// Branding Defaults (for new orgs / FundRoom AI default skin)
+// ---------------------------------------------------------------------------
+
+export const PLATFORM_BRANDING = {
+  /** Default logo paths — served from /public/_static/ */
+  logoLight: "/_static/fundroom-logo-black.png",
+  logoDark: "/_static/fundroom-logo-white.png",
+  logoIcon: "/_static/fundroom-icon.png",
+  favicon: "/icons/fundroom/favicon.png",
+
+  /** Default brand colors (per Brand Guidelines v1.1) */
+  primaryColor: "#0A1628", // Deep Navy
+  accentColor: "#0066FF", // Electric Blue
+  backgroundColor: "#FFFFFF",
+
+  /** "Powered by" badge (shown on tenant sites unless paid to remove) */
+  poweredByText: `Powered by ${PLATFORM_SHORT_NAME}`,
+  poweredByUrl: `https://${PLATFORM_DOMAIN}`,
+  poweredByRemovalFee: 50, // USD/month
+} as const;
+
+// ---------------------------------------------------------------------------
+// Platform Headers
+// ---------------------------------------------------------------------------
+
+export const PLATFORM_HEADERS = {
+  headers: {
+    "x-powered-by": `${PLATFORM_NAME} - Secure Investor Infrastructure`,
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Domain Detection Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a hostname belongs to the FundRoom AI platform.
+ * Used by middleware to distinguish platform domains from tenant custom domains.
+ */
+export function isPlatformDomain(host: string): boolean {
+  const cleanHost = host.split(":")[0]; // strip port
+  return (
+    cleanHost === PLATFORM_DOMAIN ||
+    cleanHost === APP_DOMAIN ||
+    cleanHost === LOGIN_DOMAIN ||
+    cleanHost === ADMIN_DOMAIN ||
+    cleanHost === `www.${PLATFORM_DOMAIN}` ||
+    cleanHost.endsWith(`.${PLATFORM_DOMAIN}`)
+  );
+}
+
+/**
+ * Check if the hostname is the app signup domain (app.fundroom.ai).
+ */
+export function isAppSignupDomain(host: string): boolean {
+  const cleanHost = host.split(":")[0];
+  return cleanHost === APP_DOMAIN;
+}
+
+/**
+ * Check if the hostname is the standard login domain (app.login.fundroom.ai).
+ * Front-end only access — even admins only see the user-facing side.
+ */
+export function isLoginPortalDomain(host: string): boolean {
+  const cleanHost = host.split(":")[0];
+  return cleanHost === LOGIN_DOMAIN;
+}
+
+/**
+ * Check if the hostname is the admin login domain (app.admin.fundroom.ai).
+ * Admin-only access — must be an admin to enter. No redirect to user front-end.
+ */
+export function isAdminPortalDomain(host: string): boolean {
+  const cleanHost = host.split(":")[0];
+  return cleanHost === ADMIN_DOMAIN;
+}
+
+/**
+ * Determine which platform context a request is in based on host.
+ * Returns null for tenant custom domains (handled by DomainMiddleware).
+ */
+export function getPlatformContext(
+  host: string,
+): "marketing" | "app" | "login" | "admin" | "main" | null {
+  const cleanHost = host.split(":")[0];
+
+  if (cleanHost === PLATFORM_DOMAIN || cleanHost === `www.${PLATFORM_DOMAIN}`) {
+    return "marketing";
+  }
+  if (cleanHost === APP_DOMAIN) {
+    return "app";
+  }
+  if (cleanHost === LOGIN_DOMAIN) {
+    return "login";
+  }
+  if (cleanHost === ADMIN_DOMAIN) {
+    return "admin";
+  }
+  if (cleanHost.endsWith(`.${PLATFORM_DOMAIN}`)) {
+    return "main";
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Known Hosting Domains (not tenant custom domains)
+// ---------------------------------------------------------------------------
+
+/**
+ * Domains that are known infrastructure hosts — not custom tenant domains.
+ * Used by isCustomDomain() to avoid routing Vercel/Replit preview URLs
+ * through DomainMiddleware.
+ */
+export const INFRASTRUCTURE_DOMAIN_PATTERNS = [
+  "localhost",
+  ".vercel.app",
+  ".replit.app",
+  ".replit.dev",
+  ".repl.co",
+  `.${PLATFORM_DOMAIN}`,
+  PLATFORM_DOMAIN,
+] as const;
+
+/**
+ * Check if a host is a known infrastructure/platform domain (not a tenant custom domain).
+ */
+export function isInfrastructureDomain(host: string): boolean {
+  const cleanHost = host.split(":")[0];
+  return INFRASTRUCTURE_DOMAIN_PATTERNS.some(
+    (pattern) =>
+      cleanHost === pattern ||
+      cleanHost === pattern.replace(/^\./, "") ||
+      cleanHost.endsWith(pattern),
+  );
+}

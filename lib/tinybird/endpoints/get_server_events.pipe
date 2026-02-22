@@ -1,0 +1,32 @@
+VERSION 1
+
+NODE endpoint
+SQL >
+    SELECT
+        timestamp,
+        event_name,
+        userId,
+        teamId,
+        orgId,
+        portal,
+        method,
+        source,
+        dealId,
+        investorId,
+        plan,
+        priceId,
+        errorType,
+        declineCode
+    FROM server_events__v1
+    WHERE event_name = {{ String(eventName, required=true) }}
+    {% if defined(teamId) %}
+    AND teamId = {{ String(teamId) }}
+    {% end %}
+    {% if defined(orgId) %}
+    AND orgId = {{ String(orgId) }}
+    {% end %}
+    {% if defined(since) %}
+    AND timestamp >= fromUnixTimestamp64Milli({{ Int64(since) }})
+    {% end %}
+    ORDER BY timestamp DESC
+    LIMIT {{ Int32(limit, 100) }}

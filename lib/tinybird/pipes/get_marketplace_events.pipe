@@ -1,0 +1,36 @@
+VERSION 1
+
+DESCRIPTION >
+  Query marketplace events by team and event type
+
+NODE endpoint
+SQL >
+  %
+  SELECT
+    event_name,
+    teamId,
+    dealId,
+    investorId,
+    method,
+    source,
+    timestamp
+  FROM server_events__v1
+  WHERE
+    event_name LIKE 'marketplace_%'
+    {% if defined(teamId) %}
+      AND teamId = {{ String(teamId) }}
+    {% end %}
+    {% if defined(event_name) %}
+      AND event_name = {{ String(event_name) }}
+    {% end %}
+    {% if defined(dealId) %}
+      AND dealId = {{ String(dealId) }}
+    {% end %}
+    {% if defined(start_date) %}
+      AND timestamp >= {{ DateTime(start_date) }}
+    {% end %}
+    {% if defined(end_date) %}
+      AND timestamp <= {{ DateTime(end_date) }}
+    {% end %}
+  ORDER BY timestamp DESC
+  LIMIT {{ Int32(limit, 100) }}

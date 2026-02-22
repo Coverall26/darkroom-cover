@@ -1,0 +1,432 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import prisma from "@/lib/prisma";
+import { reportError } from "@/lib/error";
+import { encryptTaxId } from "@/lib/crypto/secure-storage";
+import { requireAdminAppRouter } from "@/lib/auth/rbac";
+
+export const dynamic = "force-dynamic";
+
+interface ImportData {
+  metadata: {
+    exportedAt: string;
+    exportedBy: string;
+    teamId: string;
+    schemaVersion: string;
+    modelCounts: Record<string, number>;
+  };
+  data: {
+    funds?: any[];
+    fundAggregates?: any[];
+    investors?: any[];
+    investments?: any[];
+    capitalCalls?: any[];
+    capitalCallResponses?: any[];
+    distributions?: any[];
+    fundReports?: any[];
+    investorNotes?: any[];
+    investorDocuments?: any[];
+    accreditationAcks?: any[];
+    bankLinks?: any[];
+    transactions?: any[];
+    subscriptions?: any[];
+  };
+}
+
+interface ImportResult {
+  success: boolean;
+  imported: Record<string, number>;
+  skipped: Record<string, number>;
+  errors: { model: string; error: string }[];
+}
+
+/**
+ * POST /api/admin/import
+ *
+ * Import team data from a JSON export.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { teamId, data, dryRun } = body;
+
+    if (!teamId || typeof teamId !== "string") {
+      return NextResponse.json({ error: "Team ID required" }, { status: 400 });
+    }
+
+    if (!data || typeof data !== "object") {
+      return NextResponse.json({ error: "Import data required" }, { status: 400 });
+    }
+
+    const auth = await requireAdminAppRouter(teamId);
+    if (auth instanceof NextResponse) return auth;
+
+    const importData = data as ImportData;
+    const result: ImportResult = {
+      success: true,
+      imported: {},
+      skipped: {},
+      errors: [],
+    };
+
+    const idMappings: Record<string, Record<string, string>> = {
+      funds: {},
+      investors: {},
+      capitalCalls: {},
+      distributions: {},
+    };
+
+    if (importData.data.funds && importData.data.funds.length > 0) {
+      result.imported.funds = 0;
+      result.skipped.funds = 0;
+
+      for (const fund of importData.data.funds) {
+        try {
+          const existing = await prisma.fund.findFirst({
+            where: { teamId, name: fund.name },
+          });
+
+          if (existing) {
+            idMappings.funds[fund.id] = existing.id;
+            result.skipped.funds++;
+            continue;
+          }
+
+          if (!dryRun) {
+            const created = await prisma.fund.create({
+              data: {
+                teamId,
+                name: fund.name,
+                description: fund.description,
+                targetRaise: fund.targetRaise,
+                minimumInvestment: fund.minimumInvestment,
+                currentRaise: fund.currentRaise || 0,
+                status: fund.status || "RAISING",
+                closingDate: fund.closingDate ? new Date(fund.closingDate) : null,
+                ndaGateEnabled: fund.ndaGateEnabled ?? true,
+                capitalCallThresholdEnabled: fund.capitalCallThresholdEnabled ?? false,
+                capitalCallThreshold: fund.capitalCallThreshold || null,
+                callFrequency: fund.callFrequency || "AS_NEEDED",
+                stagedCommitmentsEnabled: fund.stagedCommitmentsEnabled ?? false,
+                customSettings: fund.customSettings || null,
+              },
+            });
+            idMappings.funds[fund.id] = created.id;
+          }
+          result.imported.funds++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "fund", error: "Failed to import fund record" });
+        }
+      }
+    }
+
+    if (importData.data.fundAggregates && importData.data.fundAggregates.length > 0) {
+      result.imported.fundAggregates = 0;
+      result.skipped.fundAggregates = 0;
+
+      for (const agg of importData.data.fundAggregates) {
+        try {
+          const fundId = idMappings.funds[agg.fundId] || agg.fundId;
+
+          const existing = await prisma.fundAggregate.findFirst({
+            where: { fundId },
+          });
+
+          if (existing) {
+            result.skipped.fundAggregates++;
+            continue;
+          }
+
+          if (!dryRun) {
+            await prisma.fundAggregate.create({
+              data: {
+                fundId,
+                totalInbound: agg.totalInbound || 0,
+                totalOutbound: agg.totalOutbound || 0,
+                totalCommitted: agg.totalCommitted || 0,
+                currentBalance: agg.currentBalance || null,
+                thresholdEnabled: agg.thresholdEnabled ?? false,
+                thresholdAmount: agg.thresholdAmount || null,
+                audit: agg.audit || null,
+              },
+            });
+          }
+          result.imported.fundAggregates++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "fundAggregate", error: "Failed to import fund aggregate" });
+        }
+      }
+    }
+
+    if (importData.data.investors && importData.data.investors.length > 0) {
+      result.imported.investors = 0;
+      result.skipped.investors = 0;
+
+      for (const investor of importData.data.investors) {
+        try {
+          const existing = await prisma.investor.findUnique({
+            where: { id: investor.id },
+          });
+
+          if (existing) {
+            idMappings.investors[investor.id] = existing.id;
+            result.skipped.investors++;
+            continue;
+          }
+
+          const existingByUser = await prisma.investor.findUnique({
+            where: { userId: investor.userId },
+          });
+
+          if (existingByUser) {
+            idMappings.investors[investor.id] = existingByUser.id;
+            result.skipped.investors++;
+            continue;
+          }
+
+          if (!dryRun) {
+            const userExists = await prisma.user.findUnique({
+              where: { id: investor.userId },
+            });
+
+            if (!userExists) {
+              result.skipped.investors++;
+              continue;
+            }
+
+            const created = await prisma.investor.create({
+              data: {
+                userId: investor.userId,
+                entityName: investor.entityName,
+                entityType: investor.entityType || "INDIVIDUAL",
+                taxId: investor.taxId ? encryptTaxId(investor.taxId) : null,
+                address: investor.address,
+                phone: investor.phone,
+                accreditationStatus: investor.accreditationStatus || "PENDING",
+                accreditationType: investor.accreditationType,
+                ndaSigned: investor.ndaSigned ?? false,
+                onboardingStep: investor.onboardingStep || 0,
+              },
+            });
+            idMappings.investors[investor.id] = created.id;
+          }
+          result.imported.investors++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "investor", error: "Failed to import investor record" });
+        }
+      }
+    }
+
+    if (importData.data.investments && importData.data.investments.length > 0) {
+      result.imported.investments = 0;
+      result.skipped.investments = 0;
+
+      for (const investment of importData.data.investments) {
+        try {
+          const fundId = idMappings.funds[investment.fundId] || investment.fundId;
+          const investorId = idMappings.investors[investment.investorId] || investment.investorId;
+
+          const existing = await prisma.investment.findUnique({
+            where: { fundId_investorId: { fundId, investorId } },
+          });
+
+          if (existing) {
+            result.skipped.investments++;
+            continue;
+          }
+
+          if (!dryRun) {
+            await prisma.investment.create({
+              data: {
+                fundId,
+                investorId,
+                commitmentAmount: investment.commitmentAmount,
+                fundedAmount: investment.fundedAmount || 0,
+                status: investment.status || "COMMITTED",
+                subscriptionDate: investment.subscriptionDate
+                  ? new Date(investment.subscriptionDate)
+                  : null,
+              },
+            });
+          }
+          result.imported.investments++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "investment", error: "Failed to import investment record" });
+        }
+      }
+    }
+
+    if (importData.data.capitalCalls && importData.data.capitalCalls.length > 0) {
+      result.imported.capitalCalls = 0;
+      result.skipped.capitalCalls = 0;
+
+      for (const call of importData.data.capitalCalls) {
+        try {
+          const fundId = idMappings.funds[call.fundId] || call.fundId;
+
+          const existing = await prisma.capitalCall.findFirst({
+            where: { fundId, callNumber: call.callNumber },
+          });
+
+          if (existing) {
+            idMappings.capitalCalls[call.id] = existing.id;
+            result.skipped.capitalCalls++;
+            continue;
+          }
+
+          if (!dryRun) {
+            const created = await prisma.capitalCall.create({
+              data: {
+                fundId,
+                callNumber: call.callNumber,
+                amount: call.amount,
+                purpose: call.purpose,
+                dueDate: new Date(call.dueDate),
+                status: call.status || "PENDING",
+                createdBy: auth.userId,
+              },
+            });
+            idMappings.capitalCalls[call.id] = created.id;
+          }
+          result.imported.capitalCalls++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "capitalCall", error: "Failed to import capital call" });
+        }
+      }
+    }
+
+    if (importData.data.distributions && importData.data.distributions.length > 0) {
+      result.imported.distributions = 0;
+      result.skipped.distributions = 0;
+
+      for (const dist of importData.data.distributions) {
+        try {
+          const fundId = idMappings.funds[dist.fundId] || dist.fundId;
+
+          const existing = await prisma.distribution.findFirst({
+            where: { fundId, distributionNumber: dist.distributionNumber },
+          });
+
+          if (existing) {
+            idMappings.distributions[dist.id] = existing.id;
+            result.skipped.distributions++;
+            continue;
+          }
+
+          if (!dryRun) {
+            const created = await prisma.distribution.create({
+              data: {
+                fundId,
+                distributionNumber: dist.distributionNumber,
+                totalAmount: dist.totalAmount,
+                distributionType: dist.distributionType || "DIVIDEND",
+                distributionDate: new Date(dist.distributionDate),
+                status: dist.status || "PENDING",
+              },
+            });
+            idMappings.distributions[dist.id] = created.id;
+          }
+          result.imported.distributions++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "distribution", error: "Failed to import distribution" });
+        }
+      }
+    }
+
+    if (importData.data.transactions && importData.data.transactions.length > 0) {
+      result.imported.transactions = 0;
+      result.skipped.transactions = 0;
+
+      for (const tx of importData.data.transactions) {
+        try {
+          const investorId = idMappings.investors[tx.investorId] || tx.investorId;
+
+          if (!dryRun) {
+            await prisma.transaction.create({
+              data: {
+                investorId,
+                type: tx.type,
+                amount: tx.amount,
+                currency: tx.currency || "USD",
+                description: tx.description,
+                capitalCallId: tx.capitalCallId
+                  ? idMappings.capitalCalls[tx.capitalCallId] || tx.capitalCallId
+                  : null,
+                distributionId: tx.distributionId
+                  ? idMappings.distributions[tx.distributionId] || tx.distributionId
+                  : null,
+                fundId: tx.fundId ? idMappings.funds[tx.fundId] || tx.fundId : null,
+                status: tx.status || "PENDING",
+                statusMessage: tx.statusMessage,
+              },
+            });
+          }
+          result.imported.transactions++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "transaction", error: "Failed to import transaction" });
+        }
+      }
+    }
+
+    if (importData.data.subscriptions && importData.data.subscriptions.length > 0) {
+      result.imported.subscriptions = 0;
+      result.skipped.subscriptions = 0;
+
+      for (const sub of importData.data.subscriptions) {
+        try {
+          const investorId = idMappings.investors[sub.investorId] || sub.investorId;
+          const fundId = sub.fundId ? idMappings.funds[sub.fundId] || sub.fundId : null;
+
+          const existing = await prisma.subscription.findFirst({
+            where: { investorId, signatureDocumentId: sub.signatureDocumentId },
+          });
+
+          if (existing) {
+            result.skipped.subscriptions++;
+            continue;
+          }
+
+          if (!dryRun) {
+            await prisma.subscription.create({
+              data: {
+                investorId,
+                fundId,
+                signatureDocumentId: sub.signatureDocumentId,
+                amount: sub.amount,
+                status: sub.status || "PENDING",
+              },
+            });
+          }
+          result.imported.subscriptions++;
+        } catch (err: unknown) {
+          result.errors.push({ model: "subscription", error: "Failed to import subscription" });
+        }
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        eventType: "DATA_IMPORT",
+        userId: auth.userId,
+        teamId,
+        resourceType: "TEAM_DATA",
+        resourceId: teamId,
+        ipAddress: req.headers.get("x-forwarded-for")?.split(",")[0] || "",
+        userAgent: req.headers.get("user-agent") || "",
+        metadata: {
+          dryRun: dryRun || false,
+          imported: result.imported,
+          skipped: result.skipped,
+          errorCount: result.errors.length,
+        },
+      },
+    }).catch((e: unknown) => reportError(e as Error));
+
+    result.success = result.errors.length === 0;
+
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    reportError(error as Error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

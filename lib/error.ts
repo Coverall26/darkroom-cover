@@ -1,0 +1,124 @@
+import { serverInstance, reportCritical as rollbarCritical, reportSecurityIncident as rollbarSecurity } from './rollbar';
+import { NextResponse } from 'next/server';
+import { NextApiResponse } from 'next';
+
+export interface ErrorContext {
+  path?: string;
+  method?: string;
+  userId?: string;
+  teamId?: string;
+  documentId?: string;
+  action?: string;
+  [key: string]: unknown;
+}
+
+export function reportError(
+  error: Error | unknown,
+  context: ErrorContext = {}
+): void {
+  const err = error instanceof Error ? error : new Error(String(error));
+  
+  if (serverInstance) {
+    serverInstance.error(err, {
+      ...context,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  
+  if (process.env.NODE_ENV === 'development') {
+    console.error('[Rollbar Error]', err.message, context);
+  }
+}
+
+export function reportWarning(
+  message: string,
+  context: ErrorContext = {}
+): void {
+  if (serverInstance) {
+    serverInstance.warning(message, {
+      ...context,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+export function reportInfo(
+  message: string,
+  context: ErrorContext = {}
+): void {
+  if (serverInstance) {
+    serverInstance.info(message, {
+      ...context,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+export function withErrorReporting<T extends (...args: unknown[]) => Promise<unknown>>(
+  fn: T,
+  context: ErrorContext = {}
+): T {
+  return (async (...args: Parameters<T>) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      reportError(error, context);
+      throw error;
+    }
+  }) as T;
+}
+
+export function createApiErrorResponse(
+  error: Error | unknown,
+  context: ErrorContext = {},
+  statusCode: number = 500
+): NextResponse {
+  reportError(error, context);
+  
+  // Never leak internal error details to clients — log server-side only.
+  return NextResponse.json(
+    { error: 'Internal server error' },
+    { status: statusCode }
+  );
+}
+
+export function handleApiError(
+  res: NextApiResponse,
+  error: Error | unknown,
+  context: ErrorContext = {},
+  statusCode: number = 500
+): void {
+  reportError(error, context);
+  
+  // Never leak internal error details to clients — log server-side only.
+  res.status(statusCode).json({
+    error: 'Internal server error',
+  });
+}
+
+export async function withPrismaErrorHandling<T>(
+  operation: () => Promise<T>,
+  context: ErrorContext = {}
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    reportError(error, {
+      ...context,
+      source: 'prisma',
+    });
+    throw error;
+  }
+}
+
+// Re-export critical alert helpers for convenience
+export const reportCriticalAlert = rollbarCritical;
+export const reportSecurityAlert = rollbarSecurity;
+
+export function captureException(error: Error | unknown): string | null {
+  if (!serverInstance) return null;
+  
+  const err = error instanceof Error ? error : new Error(String(error));
+  const uuid = serverInstance.error(err);
+  return typeof uuid === 'string' ? uuid : null;
+}

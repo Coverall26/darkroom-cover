@@ -1,0 +1,26 @@
+import { Suspense } from "react";
+import { Metadata } from "next";
+import BulkSendClient from "./page-client";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Bulk Send Document | FundRoom",
+  description: "Send the same document to multiple recipients for e-signature",
+};
+
+function LoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    </div>
+  );
+}
+
+export default function BulkSendPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <BulkSendClient />
+    </Suspense>
+  );
+}

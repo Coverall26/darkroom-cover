@@ -1,0 +1,236 @@
+// E-Signature Platform Models
+// FundRoom Sign - Company-wide document signing platform
+
+model SignatureDocument {
+  id                String                 @id @default(cuid())
+  title             String
+  description       String?
+  file              String                 // Reference to the PDF file in storage
+  storageType       DocumentStorageType    @default(S3_PATH)
+  numPages          Int?
+  status            SignatureDocumentStatus @default(DRAFT)
+  
+  // Expiration and tracking
+  expirationDate    DateTime?
+  sentAt            DateTime?
+  completedAt       DateTime?
+  declinedAt        DateTime?
+  voidedAt          DateTime?
+  voidedReason      String?
+  
+  // Message sent to recipients
+  emailSubject      String?
+  emailMessage      String?
+  
+  // Audit trail
+  auditTrail        Json?                  // Store complete audit trail
+  
+  // Subscription/investment metadata
+  documentType      String?                // "SUBSCRIPTION", "K1", "SIDE_LETTER", etc.
+  subscriptionAmount Decimal?              @db.Decimal(15, 2)  // For subscription agreements
+  metadata          Json?                  // Additional metadata (fund info, etc.)
+  investorId        String?                // Link to investor for LP documents
+  
+  // Relations
+  teamId            String
+  team              Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById       String
+  
+  recipients        SignatureRecipient[]
+  fields            SignatureField[]
+  
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  @@index([teamId])
+  @@index([status])
+  @@index([createdById])
+  @@index([teamId, status])
+}
+
+enum SignatureDocumentStatus {
+  DRAFT             // Document created but not sent
+  SENT              // Sent to recipients
+  VIEWED            // At least one recipient viewed
+  PARTIALLY_SIGNED  // Some but not all recipients signed
+  COMPLETED         // All recipients signed
+  DECLINED          // A recipient declined to sign
+  VOIDED            // Sender cancelled the document
+  EXPIRED           // Document expired before completion
+}
+
+model SignatureRecipient {
+  id                String                    @id @default(cuid())
+  documentId        String
+  document          SignatureDocument         @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  
+  name              String
+  email             String
+  role              SignatureRecipientRole    @default(SIGNER)
+  signingOrder      Int                       @default(1)        // For sequential signing
+  
+  // Status tracking
+  status            SignatureRecipientStatus  @default(PENDING)
+  viewedAt          DateTime?
+  signedAt          DateTime?
+  declinedAt        DateTime?
+  declinedReason    String?
+  
+  // Security & verification
+  signingToken      String?                   @unique // Secure token for signing URL
+  accessCode        String?                   // Optional access code for additional security
+  ipAddress         String?                   // IP address when signed
+  userAgent         String?                   // Browser info when signed
+  
+  signingUrl        String?                   // URL for recipient to sign
+  
+  // ESIGN/UETA Compliance
+  consentRecord     Json?                     // ESIGN consent capture (timestamp, version, text)
+  signatureChecksum Json?                     // Verification checksum (documentHash, signatureHash, token)
+  
+  // The actual signature data
+  signatureImage    String?                   // Base64 or URL to signature image
+  
+  fields            SignatureField[]
+  
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  
+  @@index([documentId])
+  @@index([email])
+  @@index([documentId, signingOrder])
+}
+
+enum SignatureRecipientRole {
+  SIGNER            // Must sign the document
+  VIEWER            // Only needs to view (CC)
+  APPROVER          // Must approve before others can sign
+}
+
+enum SignatureRecipientStatus {
+  PENDING           // Waiting for previous signers or not yet sent
+  SENT              // Email sent, waiting for action
+  VIEWED            // Recipient opened the document
+  SIGNED            // Recipient completed signing
+  DECLINED          // Recipient declined to sign
+}
+
+model SignatureField {
+  id                String                 @id @default(cuid())
+  documentId        String
+  document          SignatureDocument      @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  recipientId       String?
+  recipient         SignatureRecipient?    @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+  
+  type              SignatureFieldType
+  
+  // Position on document
+  pageNumber        Int
+  x                 Float                  // X position (percentage of page width)
+  y                 Float                  // Y position (percentage of page height)
+  width             Float                  // Width (percentage of page width)
+  height            Float                  // Height (percentage of page height)
+  
+  // Field configuration
+  label             String?
+  placeholder       String?
+  required          Boolean                @default(true)
+  
+  // Filled value
+  value             String?                // The value after recipient fills it
+  filledAt          DateTime?
+  
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  @@index([documentId])
+  @@index([recipientId])
+  @@index([documentId, pageNumber])
+}
+
+enum SignatureFieldType {
+  SIGNATURE         // Hand-drawn signature
+  INITIALS          // Initials
+  DATE_SIGNED       // Auto-filled date
+  TEXT              // Free text input
+  CHECKBOX          // Checkbox
+  NAME              // Auto-filled name
+  EMAIL             // Auto-filled email
+  COMPANY           // Company name
+  TITLE             // Job title
+  ADDRESS           // Mailing/physical address
+}
+
+// Signature Templates for reusable documents
+model SignatureTemplate {
+  id                String                 @id @default(cuid())
+  name              String
+  description       String?
+  file              String                 // Reference to the template PDF
+  storageType       DocumentStorageType    @default(S3_PATH)
+  numPages          Int?
+  
+  // Default recipients (roles, not specific people)
+  defaultRecipients Json?                  // Array of recipient placeholders
+  
+  // Pre-configured fields
+  fields            Json?                  // Array of field configurations
+  
+  // Default settings
+  defaultEmailSubject String?
+  defaultEmailMessage String?
+  defaultExpirationDays Int?
+  
+  // Usage tracking
+  usageCount        Int                    @default(0)
+  
+  teamId            String
+  team              Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById       String
+  
+  isPublic          Boolean                @default(false)  // Available to all team members
+  
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  @@index([teamId])
+  @@index([teamId, isPublic])
+}
+
+model SignatureAuditLog {
+  id                String   @id @default(cuid())
+  documentId        String
+  event             String
+  recipientId       String?
+  recipientEmail    String?
+  ipAddress         String?
+  userAgent         String?
+  metadata          Json?
+  
+  // Extended tracking for compliance
+  country           String?
+  city              String?
+  region            String?
+  browser           String?
+  browserVersion    String?
+  os                String?
+  osVersion         String?
+  device            String?  @default("Desktop")
+  deviceVendor      String?
+  deviceModel       String?
+  referer           String?
+  
+  // Session and action tracking
+  sessionId         String?
+  actionDuration    Int?     // Duration of action in milliseconds
+  pageNumber        Int?     // For document view events
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([documentId])
+  @@index([event])
+  @@index([documentId, event])
+  @@index([createdAt])
+  @@index([recipientEmail])
+  @@index([ipAddress])
+}

@@ -1,0 +1,269 @@
+import { useSearchParams } from "next/navigation";
+
+import React from "react";
+
+import { Download, MoreVerticalIcon } from "lucide-react";
+import { useTheme } from "next-themes";
+import { toast } from "sonner";
+
+import { timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { determineTextColor } from "@/lib/utils/determine-text-color";
+import { fileIcon } from "@/lib/utils/get-file-icon";
+import {
+  HIERARCHICAL_DISPLAY_STYLE,
+  getHierarchicalDisplayName,
+} from "@/lib/utils/hierarchical-display";
+
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+import { DocumentVersion } from "../viewer/dataroom-viewer";
+
+type DRDocument = {
+  dataroomDocumentId: string;
+  id: string;
+  name: string;
+  downloadOnly: boolean;
+  versions: DocumentVersion[];
+  canDownload: boolean;
+  hierarchicalIndex: string | null;
+};
+
+type DocumentsCardProps = {
+  document: DRDocument;
+  linkId: string;
+  viewId?: string;
+  isPreview: boolean;
+  allowDownload: boolean;
+  isProcessing?: boolean;
+  dataroomIndexEnabled?: boolean;
+  accentColor?: string | null;
+};
+
+export default function DocumentCard({
+  document,
+  linkId,
+  viewId,
+  isPreview,
+  allowDownload,
+  isProcessing = false,
+  dataroomIndexEnabled,
+  accentColor,
+}: DocumentsCardProps) {
+  const { theme, systemTheme } = useTheme();
+  const canDownload = document.canDownload && allowDownload;
+
+  const hasCustomAccent = !!accentColor;
+  const textColor = hasCustomAccent ? determineTextColor(accentColor) : undefined;
+  const isLight =
+    theme === "light" || (theme === "system" && systemTheme === "light") || (hasCustomAccent && textColor === "black");
+  const searchParams = useSearchParams();
+
+  // Get hierarchical display name
+  const displayName = getHierarchicalDisplayName(
+    document.name,
+    document.hierarchicalIndex,
+    dataroomIndexEnabled || false,
+  );
+  const previewToken = searchParams?.get("previewToken") ?? undefined;
+  const domain = searchParams?.get("domain") ?? undefined;
+  const slug = searchParams?.get("slug") ?? undefined;
+
+  const handleDocumentClick = (e: React.MouseEvent) => {
+    if (isProcessing) {
+      e.preventDefault();
+      toast.error(
+        "Document is still processing. Please wait a moment and try again.",
+      );
+      return;
+    }
+
+    e.preventDefault();
+    // Open in new tab
+    if (domain && slug) {
+      window.open(`/${slug}/d/${document.dataroomDocumentId}`, "_blank");
+    } else {
+      window.open(
+        `/view/${linkId}/d/${document.dataroomDocumentId}${
+          previewToken ? `?previewToken=${previewToken}&preview=1` : ""
+        }`,
+        "_blank",
+      );
+    }
+  };
+
+  const downloadDocument = async () => {
+    if (isPreview) {
+      toast.error("You cannot download dataroom document in preview mode.");
+      return;
+    }
+
+    const downloadPromise = (async () => {
+      const response = await fetch(`/api/links/download/dataroom-document`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          linkId,
+          viewId,
+          documentId: document.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || "Failed to download file";
+        throw new Error(errorMessage);
+      }
+
+      // Check if the response is JSON (for direct downloads) or binary (for buffered files)
+      const contentType = response.headers.get("content-type");
+
+      // If it's a watermarked PDF, handle it with the buffer method
+      if (contentType?.includes("application/pdf")) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const link = window.document.createElement("a");
+        link.href = url;
+        const disposition = response.headers.get("content-disposition");
+        const filenameMatch =
+          disposition && disposition.match(/filename="(.+)"/);
+        link.download = filenameMatch
+          ? decodeURIComponent(filenameMatch[1])
+          : document.name;
+        link.rel = "noopener noreferrer";
+        window.document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          window.document.body.removeChild(link);
+        }, 100);
+
+        return "File downloaded successfully";
+      }
+
+      // For all other files, use the iframe method
+      if (contentType?.includes("application/json")) {
+        const data = await response.json();
+        const downloadUrl = data.isDirectDownload
+          ? data.downloadUrl
+          : response.url;
+
+        // Create a hidden iframe for download
+        const iframe = window.document.createElement("iframe");
+        iframe.style.display = "none";
+        window.document.body.appendChild(iframe);
+        iframe.src = downloadUrl;
+
+        // Clean up the iframe after a delay
+        setTimeout(() => {
+          if (iframe && iframe.parentNode) {
+            window.document.body.removeChild(iframe);
+          }
+        }, 5000);
+
+        return "Download started";
+      }
+
+      throw new Error("Unexpected response format");
+    })();
+
+    toast.promise(downloadPromise, {
+      loading: "Preparing download...",
+      success: (message) => message,
+      error: (err) => err.message || "Failed to download file",
+    });
+  };
+
+  return (
+    <div
+      className={cn(
+        "group/row relative flex items-center justify-between rounded-lg border-0 p-3 ring-1 ring-gray-200 transition-all hover:bg-secondary hover:ring-gray-300 dark:bg-secondary dark:ring-gray-700 hover:dark:ring-gray-500 sm:p-4",
+        isProcessing && "cursor-not-allowed opacity-60",
+      )}
+    >
+      <div className="z-0 flex min-w-0 shrink items-center space-x-2 sm:space-x-4">
+        <div className="mx-0.5 flex w-8 items-center justify-center text-center sm:mx-1">
+          {fileIcon({
+            fileType: document.versions?.[0]?.type ?? "",
+            className: "h-8 w-8",
+            isLight,
+          })}
+        </div>
+
+        <div className="flex-col">
+          <div className="flex items-center">
+            <h2
+              className={cn(
+                "min-w-0 max-w-[300px] truncate text-sm font-semibold leading-6 sm:max-w-lg",
+                !hasCustomAccent && "text-foreground"
+              )}
+              style={{ ...HIERARCHICAL_DISPLAY_STYLE, ...(hasCustomAccent && { color: textColor }) }}
+            >
+              <button
+                onClick={handleDocumentClick}
+                className="w-full truncate"
+                disabled={isProcessing}
+              >
+                <span>{displayName}</span>
+                {isProcessing && (
+                  <span className={cn("ml-2 text-xs", !hasCustomAccent && "text-muted-foreground")} style={hasCustomAccent ? { opacity: 0.7 } : undefined}>
+                    (Processing...)
+                  </span>
+                )}
+                <span className="absolute inset-0" />
+              </button>
+            </h2>
+          </div>
+          <div 
+            className={cn("mt-1 flex items-center space-x-1 text-xs leading-5", !hasCustomAccent && "text-muted-foreground")} 
+            style={hasCustomAccent ? { color: textColor, opacity: 0.7 } : undefined}
+          >
+            <p className="truncate">
+              {document.versions?.[0]?.updatedAt ? `Updated ${timeAgo(document.versions[0].updatedAt)}` : ""}
+            </p>
+          </div>
+        </div>
+      </div>
+      {canDownload && !isProcessing && (
+        <div className="z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 text-gray-500 ring-1 ring-gray-100 hover:bg-gray-200 group-hover/row:text-foreground group-hover/row:ring-gray-300"
+                aria-label="Open menu"
+              >
+                <MoreVerticalIcon className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  downloadDocument();
+                }}
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </div>
+  );
+}

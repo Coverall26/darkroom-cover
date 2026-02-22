@@ -1,0 +1,27 @@
+VERSION 1
+
+NODE endpoint
+SQL >
+    SELECT
+        timestamp,
+        event_id,
+        event,
+        recipient_id,
+        recipient_email,
+        ip_address,
+        session_id,
+        page_number,
+        action_duration,
+        country,
+        city,
+        region,
+        device,
+        browser,
+        os
+    FROM signature_events__v1
+    WHERE document_id = {{ String(documentId, required=true) }}
+    {% if defined(event) %}
+    AND event = {{ String(event) }}
+    {% end %}
+    ORDER BY timestamp DESC
+    LIMIT {{ Int32(limit, 100) }}

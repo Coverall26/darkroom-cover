@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.6; color: #1a1a1a; max-width: 8.5in; margin: 0 auto; padding: 1in; }
+    h1 { text-align: center; font-size: 16pt; margin-bottom: 0.5in; text-transform: uppercase; letter-spacing: 1px; }
+    h2 { font-size: 13pt; margin-top: 0.3in; margin-bottom: 0.15in; }
+    p { margin: 0.1in 0; text-align: justify; }
+    .parties { margin: 0.3in 0; }
+    .signature-block { margin-top: 0.5in; page-break-inside: avoid; }
+    .sig-line { border-bottom: 1px solid #333; width: 3in; display: inline-block; margin-bottom: 4px; }
+    .sig-label { font-size: 10pt; color: #555; }
+    .merge-field { background: #fffde7; padding: 1px 4px; border: 1px dashed #ccc; font-weight: bold; }
+    .date-line { margin-top: 0.3in; }
+    ol { padding-left: 0.4in; }
+    ol li { margin-bottom: 0.1in; }
+  </style>
+</head>
+<body>
+
+<h1>Non-Disclosure and Confidentiality Agreement</h1>
+
+<div class="parties">
+  <p>This Non-Disclosure and Confidentiality Agreement (this "<strong>Agreement</strong>") is entered into as of <span class="merge-field">{{date}}</span> (the "<strong>Effective Date</strong>"), by and between:</p>
+
+  <p><strong>Disclosing Party:</strong> <span class="merge-field">{{gp_entity}}</span>, a Delaware limited liability company, and its affiliates, including <span class="merge-field">{{fund_name}}</span> (collectively, the "<strong>Company</strong>"); and</p>
+
+  <p><strong>Receiving Party:</strong> <span class="merge-field">{{investor_name}}</span><span id="entity-block">, on behalf of <span class="merge-field">{{investor_entity}}</span></span> (the "<strong>Recipient</strong>").</p>
+
+  <p>The Company and Recipient are each referred to herein as a "<strong>Party</strong>" and collectively as the "<strong>Parties</strong>."</p>
+</div>
+
+<h2>RECITALS</h2>
+<p>WHEREAS, the Company is offering limited partnership interests (the "<strong>Interests</strong>") in <span class="merge-field">{{fund_name}}</span> (the "<strong>Fund</strong>") pursuant to a private placement under Regulation D of the Securities Act of 1933, as amended;</p>
+<p>WHEREAS, the Recipient desires to evaluate a potential investment in the Fund and, in connection therewith, may receive certain confidential information from the Company;</p>
+<p>NOW, THEREFORE, in consideration of the mutual covenants and agreements set forth herein, the Parties agree as follows:</p>
+
+<h2>1. Definition of Confidential Information</h2>
+<p>"<strong>Confidential Information</strong>" means all non-public information disclosed by the Company to the Recipient, whether orally, in writing, electronically, or by inspection, including but not limited to: (a) the existence and terms of the offering; (b) financial projections, business plans, and strategies; (c) investor lists and subscription information; (d) proprietary data, trade secrets, and know-how; (e) the Private Placement Memorandum, Limited Partnership Agreement, Subscription Agreement, and all related offering documents; and (f) any other information marked or identified as confidential.</p>
+
+<h2>2. Obligations of Recipient</h2>
+<p>The Recipient agrees to: (a) hold all Confidential Information in strict confidence; (b) not disclose Confidential Information to any third party without the prior written consent of the Company; (c) use Confidential Information solely for the purpose of evaluating a potential investment in the Fund; (d) limit access to Confidential Information to those of Recipient's advisors, employees, or representatives who have a need to know and are bound by confidentiality obligations at least as protective as those contained herein; and (e) promptly notify the Company of any unauthorized disclosure or use of Confidential Information.</p>
+
+<h2>3. Exclusions</h2>
+<p>Confidential Information does not include information that: (a) is or becomes publicly available through no fault of the Recipient; (b) was in the Recipient's possession prior to disclosure by the Company, as evidenced by written records; (c) is independently developed by the Recipient without use of Confidential Information; or (d) is rightfully received from a third party without restriction on disclosure.</p>
+
+<h2>4. Required Disclosures</h2>
+<p>If the Recipient becomes legally compelled to disclose Confidential Information, the Recipient shall (a) provide prompt written notice to the Company (to the extent legally permissible) to enable the Company to seek a protective order, and (b) disclose only that portion of the Confidential Information that is legally required to be disclosed.</p>
+
+<h2>5. Return of Materials</h2>
+<p>Upon the Company's written request, or upon the termination of this Agreement, the Recipient shall promptly return or destroy all Confidential Information and any copies thereof, and shall certify in writing that it has done so.</p>
+
+<h2>6. No Obligation; No Representations</h2>
+<p>Nothing in this Agreement obligates either Party to proceed with any transaction. The Company makes no representations or warranties as to the accuracy or completeness of the Confidential Information. The Recipient acknowledges that it shall make its own independent evaluation of any investment opportunity.</p>
+
+<h2>7. Term</h2>
+<p>This Agreement shall remain in effect for a period of two (2) years from the Effective Date, unless earlier terminated by written agreement of the Parties. The obligations of confidentiality with respect to trade secrets shall survive termination indefinitely.</p>
+
+<h2>8. Remedies</h2>
+<p>The Recipient acknowledges that any breach of this Agreement may cause irreparable harm to the Company for which monetary damages would be inadequate. Accordingly, the Company shall be entitled to seek equitable relief, including injunction and specific performance, in addition to all other remedies available at law or in equity.</p>
+
+<h2>9. Governing Law</h2>
+<p>This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws provisions.</p>
+
+<h2>10. Entire Agreement</h2>
+<p>This Agreement constitutes the entire agreement between the Parties with respect to the subject matter hereof and supersedes all prior or contemporaneous negotiations, representations, or agreements, whether written or oral.</p>
+
+<div class="signature-block">
+  <p><strong>IN WITNESS WHEREOF</strong>, the Parties have executed this Agreement as of the Effective Date.</p>
+
+  <div style="display: flex; justify-content: space-between; margin-top: 0.4in;">
+    <div>
+      <p><strong>RECIPIENT:</strong></p>
+      <div class="sig-line merge-field">{{investor_name}}</div>
+      <p class="sig-label">Signature</p>
+      <div class="sig-line merge-field">{{investor_name}}</div>
+      <p class="sig-label">Printed Name</p>
+      <div class="sig-line merge-field">{{signatory_title}}</div>
+      <p class="sig-label">Title (if applicable)</p>
+      <div class="date-line">
+        <div class="sig-line merge-field">{{date}}</div>
+        <p class="sig-label">Date</p>
+      </div>
+    </div>
+    <div>
+      <p><strong>COMPANY:</strong></p>
+      <div class="sig-line merge-field">{{gp_entity}}</div>
+      <p class="sig-label">By: Authorized Representative</p>
+      <div class="date-line">
+        <div class="sig-line merge-field">{{date}}</div>
+        <p class="sig-label">Date</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top: 0.5in; font-size: 9pt; color: #888; text-align: center;">
+  This document was generated by FundRoom.ai — Confidential
+</p>
+
+</body>
+</html>

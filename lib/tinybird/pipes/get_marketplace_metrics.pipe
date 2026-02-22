@@ -1,0 +1,26 @@
+VERSION 1
+
+DESCRIPTION >
+  Aggregate marketplace pipeline metrics by team over a time range
+
+NODE endpoint
+SQL >
+  %
+  SELECT
+    event_name,
+    count() AS event_count,
+    uniqExact(dealId) AS unique_deals,
+    uniqExact(investorId) AS unique_investors,
+    toDate(timestamp) AS event_date
+  FROM server_events__v1
+  WHERE
+    event_name LIKE 'marketplace_%'
+    AND teamId = {{ String(teamId, required=True) }}
+    {% if defined(start_date) %}
+      AND timestamp >= {{ DateTime(start_date) }}
+    {% end %}
+    {% if defined(end_date) %}
+      AND timestamp <= {{ DateTime(end_date) }}
+    {% end %}
+  GROUP BY event_name, event_date
+  ORDER BY event_date DESC, event_count DESC

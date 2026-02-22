@@ -1,0 +1,253 @@
+import { NextApiRequest, NextApiResponse } from "next";
+
+import { authOptions } from "@/lib/auth/auth-options";
+import { Prisma } from "@prisma/client";
+import slugify from "@sindresorhus/slugify";
+import { getServerSession } from "next-auth/next";
+
+import { newId } from "@/lib/id-helper";
+import prisma from "@/lib/prisma";
+import { CustomUser } from "@/lib/types";
+import { reportError } from "@/lib/error";
+
+export default async function handle(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  if (req.method === "GET") {
+    // GET /api/teams/:teamId/datarooms
+    const session = await getServerSession(req, res, authOptions);
+    if (!session) {
+      return res.status(401).end("Unauthorized");
+    }
+
+    const userId = (session.user as CustomUser).id;
+    const { teamId, search, status, tags } = req.query as {
+      teamId: string;
+      search?: string;
+      status?: string;
+      tags?: string;
+    };
+
+    try {
+      const teamAccess = await prisma.userTeam.findUnique({
+        where: {
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
+          },
+        },
+        select: {
+          teamId: true,
+        },
+      });
+
+      if (!teamAccess) {
+        return res.status(401).end("Unauthorized");
+      }
+
+      // Get total unfiltered count first
+      const totalCount = await prisma.dataroom.count({
+        where: {
+          teamId: teamId,
+        },
+      });
+
+      // Build where clause based on filters
+      const whereClause: Prisma.DataroomWhereInput = {
+        teamId: teamId,
+      };
+
+      // Search filter
+      if (search) {
+        whereClause.name = {
+          contains: search,
+          mode: "insensitive",
+        };
+      }
+
+      // Tags filter
+      if (tags) {
+        const tagNames = tags.split(",").filter(Boolean);
+        if (tagNames.length > 0) {
+          whereClause.tags = {
+            some: {
+              tag: {
+                name: {
+                  in: tagNames,
+                },
+              },
+            },
+          };
+        }
+      }
+
+      // Check if the user is part of the team
+      const datarooms = await prisma.dataroom.findMany({
+        where: whereClause,
+        include: {
+          _count: {
+            select: { documents: true, views: true },
+          },
+          links: {
+            where: {
+              linkType: "DATAROOM_LINK",
+              deletedAt: null,
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              isArchived: true,
+              expiresAt: true,
+              createdAt: true,
+            },
+          },
+          views: {
+            orderBy: {
+              viewedAt: "desc",
+            },
+            take: 1,
+            select: {
+              viewedAt: true,
+            },
+          },
+          tags: {
+            include: {
+              tag: {
+                select: {
+                  id: true,
+                  name: true,
+                  color: true,
+                  description: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      // Status filter (applied after fetching since it's computed)
+      let filteredDatarooms = datarooms;
+      if (status) {
+        filteredDatarooms = datarooms.filter((dataroom) => {
+          const activeLinks = dataroom.links.filter((link) => {
+            if (link.isArchived) return false;
+            if (link.expiresAt && new Date(link.expiresAt) < new Date())
+              return false;
+            return true;
+          });
+          const isActive = activeLinks.length > 0;
+
+          if (status === "active") {
+            return isActive;
+          } else if (status === "inactive") {
+            return !isActive;
+          }
+          return true;
+        });
+      }
+
+      return res.status(200).json({
+        datarooms: filteredDatarooms,
+        totalCount,
+      });
+    } catch (error) {
+      reportError(error as Error);
+      console.error("Request error", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  } else if (req.method === "POST") {
+    // POST /api/teams/:teamId/datarooms
+    const session = await getServerSession(req, res, authOptions);
+    if (!session) {
+      res.status(401).end("Unauthorized");
+      return;
+    }
+
+    const userId = (session.user as CustomUser).id;
+
+    const { teamId } = req.query as { teamId: string };
+    const { name } = req.body as { name: string };
+
+    try {
+      // Check if the user is part of the team (no plan restrictions for self-hosted)
+      const team = await prisma.team.findUnique({
+        where: {
+          id: teamId,
+          users: {
+            some: {
+              userId: userId,
+            },
+          },
+        },
+      });
+
+      if (!team) {
+        return res.status(401).end("Unauthorized");
+      }
+
+      const pId = newId("dataroom");
+
+      // Create dataroom with Quick Add group and default link in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Create the dataroom
+        const dataroom = await tx.dataroom.create({
+          data: {
+            name: name,
+            teamId: teamId,
+            pId: pId,
+          },
+        });
+
+        // 2. Create the Quick Add group with allowAll=true for full access
+        const quickAddGroup = await tx.viewerGroup.create({
+          data: {
+            name: "Quick Add",
+            dataroomId: dataroom.id,
+            teamId: teamId,
+            isQuickAdd: true,
+            allowAll: true, // Full access to all folders and files
+          },
+        });
+
+        // 3. Create default link for the Quick Add group
+        await tx.link.create({
+          data: {
+            name: "Quick Add Link",
+            linkType: "DATAROOM_LINK",
+            dataroomId: dataroom.id,
+            groupId: quickAddGroup.id,
+            audienceType: "GROUP",
+            teamId: teamId,
+            emailProtected: true, // Require email
+            emailAuthenticated: false, // Session-based (no re-verification during session)
+            allowDownload: false, // No downloads by default
+            enableNotification: true,
+          },
+        });
+
+        return dataroom;
+      });
+
+      const dataroomWithCount = {
+        ...result,
+        _count: { documents: 0 },
+      };
+
+      res.status(201).json({ dataroom: dataroomWithCount });
+    } catch (error) {
+      reportError(error as Error);
+      console.error("Request error", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  } else {
+    // We only allow POST requests
+    res.setHeader("Allow", ["GET", "POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}

@@ -1,0 +1,101 @@
+import { NextApiRequest, NextApiResponse } from "next";
+
+import { authOptions } from "@/lib/auth/auth-options";
+import slugify from "@sindresorhus/slugify";
+import { getServerSession } from "next-auth/next";
+
+import prisma from "@/lib/prisma";
+import { CustomUser } from "@/lib/types";
+import { folderPathSchema } from "@/lib/zod/schemas/folders";
+import { reportError } from "@/lib/error";
+
+export default async function handle(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  if (req.method === "GET") {
+    // GET /api/teams/:teamId/datarooms/:id/folders/parents/:name
+    const session = await getServerSession(req, res, authOptions);
+    if (!session) {
+      return res.status(401).end("Unauthorized");
+    }
+
+    const userId = (session.user as CustomUser).id;
+    const {
+      teamId,
+      id: dataroomId,
+      name,
+    } = req.query as { teamId: string; id: string; name: string[] };
+
+    // Validate that name is an array of strings using shared Zod schema
+    const nameValidation = folderPathSchema.safeParse(name);
+    if (!nameValidation.success) {
+      return res.status(400).json({
+        error: "Invalid folder path format",
+        details: nameValidation.error.issues.map((issue) => issue.message),
+      });
+    }
+
+    const validatedName = nameValidation.data;
+    // Slugify each path segment to match how folders are stored in the database
+    const slugifiedName = validatedName.map((segment) => slugify(segment));
+    let folderNames = [];
+
+    try {
+      // Check if the user is part of the team
+      const team = await prisma.team.findUnique({
+        where: {
+          id: teamId,
+          users: {
+            some: {
+              userId: userId,
+            },
+          },
+        },
+      });
+
+      if (!team) {
+        return res.status(401).end("Unauthorized");
+      }
+
+      for (let i = 0; i < slugifiedName.length; i++) {
+        const path = "/" + slugifiedName.slice(0, i + 1).join("/"); // construct the materialized path
+
+        const folder = await prisma.dataroomFolder.findUnique({
+          where: {
+            dataroomId_path: {
+              dataroomId,
+              path,
+            },
+          },
+          select: {
+            id: true,
+            parentId: true,
+            name: true,
+            hierarchicalIndex: true,
+          },
+        });
+
+        if (!folder) {
+          return res.status(404).end("Parent Folder not found");
+        }
+
+        folderNames.push({
+          name: folder.name,
+          path: path,
+          hierarchicalIndex: folder.hierarchicalIndex,
+        });
+      }
+
+      return res.status(200).json(folderNames);
+    } catch (error) {
+      reportError(error as Error);
+      console.error("Request error", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  } else {
+    // We only allow POST requests
+    res.setHeader("Allow", ["GET", "POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}

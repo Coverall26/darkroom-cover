@@ -1,0 +1,26 @@
+VERSION 1
+
+DESCRIPTION >
+  Server-side business events from API routes (funnels, marketplace, billing).
+  Published via @chronark/zod-bird from lib/tracking/server-events.ts.
+  Marketplace events use 'marketplace_' prefix (e.g., marketplace_deal_created).
+
+SCHEMA >
+  `timestamp` DateTime64(3) `json:$.timestamp` DEFAULT now(),
+  `event_name` LowCardinality(String) `json:$.event_name`,
+  `userId` Nullable(String) `json:$.userId`,
+  `teamId` Nullable(String) `json:$.teamId`,
+  `orgId` Nullable(String) `json:$.orgId`,
+  `portal` Nullable(LowCardinality(String)) `json:$.portal`,
+  `method` Nullable(String) `json:$.method`,
+  `source` Nullable(String) `json:$.source`,
+  `dealId` Nullable(String) `json:$.dealId`,
+  `investorId` Nullable(String) `json:$.investorId`,
+  `plan` Nullable(LowCardinality(String)) `json:$.plan`,
+  `priceId` Nullable(String) `json:$.priceId`,
+  `errorType` Nullable(LowCardinality(String)) `json:$.errorType`,
+  `declineCode` Nullable(String) `json:$.declineCode`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "event_name, teamId, timestamp"

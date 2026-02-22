@@ -1,0 +1,84 @@
+{
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "prisma generate --schema=./prisma/schema.prisma && node scripts/generate-sw-version.js && next build",
+  "framework": "nextjs",
+  "functions": {
+    "pages/api/mupdf/convert-page.ts": {
+      "maxDuration": 180
+    },
+    "pages/api/mupdf/annotate-document.ts": {
+      "maxDuration": 300
+    },
+    "pages/api/mupdf/process-pdf-local.ts": {
+      "maxDuration": 300
+    },
+    "pages/api/sign/[token].ts": {
+      "maxDuration": 30
+    },
+    "pages/api/webhooks/persona.ts": {
+      "maxDuration": 30
+    },
+    "pages/api/webhooks/esign.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/webhooks/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Methods", "value": "POST,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Stripe-Signature, Persona-Signature, Plaid-Verification" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Vary", "value": "Origin" }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/icons/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=604800" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/lp/:path*",
+      "destination": "/lp/:path*"
+    },
+    {
+      "source": "/sign/:token",
+      "destination": "/sign/:token"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/home",
+      "destination": "/dashboard",
+      "permanent": true
+    }
+  ]
+}

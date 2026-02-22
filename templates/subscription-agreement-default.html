@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.6; color: #1a1a1a; max-width: 8.5in; margin: 0 auto; padding: 1in; }
+    h1 { text-align: center; font-size: 16pt; margin-bottom: 0.3in; text-transform: uppercase; letter-spacing: 1px; }
+    h2 { font-size: 14pt; text-align: center; margin-bottom: 0.5in; color: #333; }
+    h3 { font-size: 13pt; margin-top: 0.3in; margin-bottom: 0.15in; }
+    p { margin: 0.1in 0; text-align: justify; }
+    .merge-field { background: #fffde7; padding: 1px 4px; border: 1px dashed #ccc; font-weight: bold; }
+    .investor-info { border: 1px solid #ddd; padding: 0.2in; margin: 0.3in 0; background: #fafafa; }
+    .investor-info table { width: 100%; border-collapse: collapse; }
+    .investor-info td { padding: 6px 8px; vertical-align: top; }
+    .investor-info td:first-child { font-weight: bold; width: 200px; color: #555; }
+    .signature-block { margin-top: 0.5in; page-break-inside: avoid; }
+    .sig-line { border-bottom: 1px solid #333; width: 3in; display: inline-block; margin-bottom: 4px; }
+    .sig-label { font-size: 10pt; color: #555; }
+    .section { margin: 0.3in 0; }
+    .wire-info { border: 1px solid #0066FF; padding: 0.2in; margin: 0.3in 0; background: #f0f7ff; border-radius: 4px; }
+    .wire-info h4 { color: #0066FF; margin-top: 0; }
+    ol { padding-left: 0.4in; }
+    ol li { margin-bottom: 0.1in; }
+    .checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid #333; margin-right: 6px; vertical-align: middle; }
+    .cert-item { margin: 0.15in 0; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+
+<h1>Subscription Agreement</h1>
+<h2><span class="merge-field">{{fund_name}}</span></h2>
+
+<div class="section">
+  <p>This Subscription Agreement (this "<strong>Agreement</strong>") is entered into by and between <span class="merge-field">{{gp_entity}}</span> (the "<strong>General Partner</strong>"), acting on behalf of <span class="merge-field">{{fund_name}}</span> (the "<strong>Fund</strong>"), and the undersigned subscriber (the "<strong>Subscriber</strong>").</p>
+</div>
+
+<h3>1. Subscriber Information</h3>
+<div class="investor-info">
+  <table>
+    <tr><td>Legal Name:</td><td><span class="merge-field">{{investor_name}}</span></td></tr>
+    <tr><td>Entity Name:</td><td><span class="merge-field">{{investor_entity}}</span></td></tr>
+    <tr><td>Entity Type:</td><td><span class="merge-field">{{entity_type}}</span></td></tr>
+    <tr><td>Email:</td><td><span class="merge-field">{{email}}</span></td></tr>
+    <tr><td>Address:</td><td><span class="merge-field">{{address}}</span></td></tr>
+    <tr><td>Tax ID:</td><td><span class="merge-field">{{tax_id}}</span></td></tr>
+  </table>
+</div>
+
+<h3>2. Subscription Details</h3>
+<div class="investor-info">
+  <table>
+    <tr><td>Fund:</td><td><span class="merge-field">{{fund_name}}</span></td></tr>
+    <tr><td>Commitment Amount:</td><td><span class="merge-field">{{investment_amount}}</span></td></tr>
+    <tr><td>Number of Units:</td><td><span class="merge-field">{{commitment_units}}</span></td></tr>
+    <tr><td>Subscription Date:</td><td><span class="merge-field">{{date}}</span></td></tr>
+  </table>
+</div>
+
+<h3>3. Subscription and Capital Commitment</h3>
+<p>The Subscriber hereby irrevocably subscribes for limited partnership interests in the Fund in the aggregate amount of <span class="merge-field">{{investment_amount}}</span> (the "<strong>Capital Commitment</strong>"), subject to acceptance by the General Partner. The Capital Commitment shall be payable in accordance with the terms set forth in the Limited Partnership Agreement of the Fund (the "<strong>LPA</strong>").</p>
+
+<p>The Subscriber acknowledges that the General Partner may, in its sole discretion, accept or reject this subscription in whole or in part. If accepted, the Subscriber shall be admitted as a Limited Partner of the Fund upon execution of the LPA and payment of the initial capital contribution.</p>
+
+<h3>4. Payment of Subscription Amount</h3>
+<p>The Subscriber shall remit the Capital Commitment (or such portion as may be called by the General Partner) by wire transfer to the following account:</p>
+
+<div class="wire-info">
+  <h4>Wire Transfer Instructions</h4>
+  <table>
+    <tr><td style="width: 150px; font-weight: bold;">Bank Name:</td><td>{{wire_bank}}</td></tr>
+    <tr><td style="font-weight: bold;">Account Name:</td><td>{{wire_account}}</td></tr>
+    <tr><td style="font-weight: bold;">Routing Number:</td><td>{{wire_routing}}</td></tr>
+    <tr><td style="font-weight: bold;">Reference:</td><td>BFF-I [Subscriber Last Name]</td></tr>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+<h3>5. Representations and Warranties of Subscriber</h3>
+<p>The Subscriber hereby represents and warrants to the Fund and the General Partner as follows:</p>
+
+<ol type="a">
+  <li><strong>Accredited Investor Status.</strong> The Subscriber is an "accredited investor" as defined in Rule 501(a) of Regulation D under the Securities Act of 1933, as amended (the "<strong>Securities Act</strong>").</li>
+
+  <li><strong>Investment Purpose.</strong> The Subscriber is acquiring the Interests for its own account, for investment purposes only, and not with a view toward the distribution or resale thereof.</li>
+
+  <li><strong>Sophistication and Experience.</strong> The Subscriber has such knowledge and experience in financial and business matters that it is capable of evaluating the merits and risks of an investment in the Fund and has the financial ability to bear the economic risk of such investment, including the possible loss of the entire investment.</li>
+
+  <li><strong>Access to Information.</strong> The Subscriber has received and reviewed the Private Placement Memorandum, the LPA, and all other offering documents of the Fund. The Subscriber has had the opportunity to ask questions of and receive answers from the General Partner concerning the terms and conditions of the offering and the Fund's business and affairs.</li>
+
+  <li><strong>No General Solicitation.</strong> The Subscriber was not solicited to invest through any form of general solicitation or general advertising.</li>
+
+  <li><strong>Restricted Securities.</strong> The Subscriber understands that the Interests have not been registered under the Securities Act or the securities laws of any state and are restricted securities that may not be transferred except in compliance with applicable securities laws.</li>
+
+  <li><strong>Anti-Money Laundering.</strong> The funds used for this investment are not derived from or related to any illegal activities, including money laundering or terrorist financing. The Subscriber is in compliance with all applicable anti-money laundering laws and regulations, including the Bank Secrecy Act and the USA PATRIOT Act.</li>
+
+  <li><strong>Tax Identification.</strong> The Subscriber's tax identification number provided herein is true, correct, and complete, and the Subscriber consents to the use of such information for tax reporting purposes, including the preparation and filing of Schedule K-1.</li>
+</ol>
+
+<h3>6. Accreditation Certification</h3>
+<p>The Subscriber certifies that it qualifies as an accredited investor under one or more of the following categories (check all that apply):</p>
+
+<div class="cert-item"><span class="checkbox"></span> Individual with income exceeding $200,000 (or $300,000 jointly with spouse) in each of the last two years, with reasonable expectation of the same in the current year</div>
+<div class="cert-item"><span class="checkbox"></span> Individual with net worth exceeding $1,000,000 (excluding primary residence), individually or jointly with spouse</div>
+<div class="cert-item"><span class="checkbox"></span> Entity with assets exceeding $5,000,000, not formed for the specific purpose of acquiring the Interests</div>
+<div class="cert-item"><span class="checkbox"></span> Entity in which all equity owners are accredited investors</div>
+<div class="cert-item"><span class="checkbox"></span> Holder of Series 7, Series 65, or Series 82 license in good standing</div>
+<div class="cert-item"><span class="checkbox"></span> "Knowledgeable employee" of the Fund as defined under Rule 3c-5 of the Investment Company Act</div>
+
+<div class="page-break"></div>
+
+<h3>7. Indemnification</h3>
+<p>The Subscriber agrees to indemnify, defend, and hold harmless the Fund, the General Partner, and their respective affiliates, officers, directors, employees, and agents from and against any and all losses, damages, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or related to any breach of the representations, warranties, or agreements made by the Subscriber in this Agreement.</p>
+
+<h3>8. Governing Law; Dispute Resolution</h3>
+<p>This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles. Any dispute arising out of or relating to this Agreement shall be resolved through binding arbitration in accordance with the rules of the American Arbitration Association, with the arbitration to be held in the state in which the General Partner maintains its principal office.</p>
+
+<h3>9. Entire Agreement; Amendment</h3>
+<p>This Agreement, together with the LPA and any side letter entered into between the Subscriber and the General Partner, constitutes the entire agreement between the Parties with respect to the Subscriber's investment in the Fund. This Agreement may not be amended except by a written instrument signed by both Parties.</p>
+
+<h3>10. Counterparts; Electronic Execution</h3>
+<p>This Agreement may be executed in counterparts, each of which shall be deemed an original, and all of which together shall constitute one and the same instrument. Electronic signatures shall be deemed original signatures for all purposes under the Electronic Signatures in Global and National Commerce Act (ESIGN Act) and the Uniform Electronic Transactions Act (UETA).</p>
+
+<div class="signature-block">
+  <p><strong>IN WITNESS WHEREOF</strong>, the Subscriber has executed this Subscription Agreement as of the date set forth below.</p>
+
+  <div style="margin-top: 0.4in;">
+    <p><strong>SUBSCRIBER:</strong></p>
+    <div class="sig-line merge-field">{{investor_name}}</div>
+    <p class="sig-label">Signature</p>
+    <div class="sig-line merge-field">{{investor_name}}</div>
+    <p class="sig-label">Printed Name</p>
+    <div class="sig-line merge-field">{{signatory_title}}</div>
+    <p class="sig-label">Title (if applicable)</p>
+    <div class="sig-line merge-field">{{investor_entity}}</div>
+    <p class="sig-label">Entity Name (if applicable)</p>
+    <div style="margin-top: 0.2in;">
+      <div class="sig-line merge-field">{{date}}</div>
+      <p class="sig-label">Date</p>
+    </div>
+  </div>
+
+  <div style="margin-top: 0.5in;">
+    <p><strong>ACCEPTED BY THE GENERAL PARTNER:</strong></p>
+    <p><span class="merge-field">{{gp_entity}}</span></p>
+    <div class="sig-line"></div>
+    <p class="sig-label">By: Authorized Representative</p>
+    <div class="sig-line merge-field">{{date}}</div>
+    <p class="sig-label">Date</p>
+  </div>
+</div>
+
+<p style="margin-top: 0.5in; font-size: 9pt; color: #888; text-align: center;">
+  This document was generated by FundRoom.ai — Confidential
+</p>
+
+</body>
+</html>

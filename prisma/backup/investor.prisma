@@ -1,0 +1,484 @@
+model Investor {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Fund Association (many-to-one: multiple investors per fund)
+  fundId                String?
+  fund                  Fund?    @relation(fields: [fundId], references: [id], onDelete: SetNull)
+  
+  entityName            String?
+  entityType            String   @default("INDIVIDUAL")
+  taxId                 String?
+  address               String?
+  phone                 String?
+  
+  fundData              Json?
+  signedDocs            Json?
+  
+  // Accreditation Status
+  accreditationStatus   String   @default("PENDING")  // PENDING, SELF_CERTIFIED, KYC_VERIFIED, EXPIRED
+  accreditationType     String?  // INCOME, NET_WORTH, PROFESSIONAL, ENTITY, OTHER
+  accreditationExpiresAt DateTime?  // Annual re-verification for 506(c)
+  
+  // Persona KYC/AML Integration
+  personaInquiryId      String?  // Persona inquiry ID
+  personaStatus         String   @default("NOT_STARTED")  // NOT_STARTED, PENDING, APPROVED, DECLINED, NEEDS_REVIEW, EXPIRED
+  personaVerifiedAt     DateTime?
+  personaReferenceId    String?  // Our internal reference ID sent to Persona
+  personaData           Json?    // Full Persona verification response data
+  
+  // NDA Gate
+  ndaSigned             Boolean  @default(false)
+  ndaSignedAt           DateTime?
+  
+  // Onboarding Progress
+  onboardingStep        Int      @default(0)
+  onboardingCompletedAt DateTime?
+  
+  investments           Investment[]
+  capitalCalls          CapitalCallResponse[]
+  notes                 InvestorNote[]
+  accreditationAcks     AccreditationAck[]
+  documents             InvestorDocument[]
+  bankLinks             BankLink[]
+  transactions          Transaction[]
+  entities              EntityInvestor[]
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+  @@index([fundId])
+  @@index([accreditationStatus])
+}
+
+model InvestorDocument {
+  id                    String   @id @default(cuid())
+  investorId            String
+  investor              Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  
+  title                 String
+  documentType          String   @default("OTHER")
+  storageKey            String
+  storageType           String   @default("S3_PATH")
+  
+  signatureDocumentId   String
+  signedAt              DateTime?
+  
+  ipAddress             String?
+  userAgent             String?
+  auditTrail            Json?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([investorId, signatureDocumentId])
+  @@index([investorId])
+  @@index([signatureDocumentId])
+  @@index([documentType])
+}
+
+model AccreditationAck {
+  id              String   @id @default(cuid())
+  investorId      String
+  investor        Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  
+  acknowledged    Boolean  @default(false)
+  method          String   @default("SELF_CERTIFIED")
+  
+  // 506(c) Compliance: Accreditation Type Selection
+  accreditationType    String?  // INCOME, NET_WORTH, PROFESSIONAL, ENTITY, OTHER
+  accreditationDetails Json?    // Structured data for selected type
+  
+  // Self-Acknowledgment Checkboxes (506(c) "Reasonable Steps")
+  confirmAccredited    Boolean  @default(false)  // "I confirm I am an accredited investor"
+  confirmRiskAware     Boolean  @default(false)  // "I understand the risks of private investments"
+  confirmDocReview     Boolean  @default(false)  // "I have reviewed the offering documents"
+  confirmRepresentations Boolean @default(false) // "My representations are true and accurate"
+  
+  // KYC Integration Hooks (for future API connection)
+  kycProvider          String?  // PLAID, PARALLEL_MARKETS, VERIFY_INVESTOR, etc.
+  kycVerificationId    String?  // External verification ID
+  kycStatus            String?  // PENDING, VERIFIED, FAILED, EXPIRED
+  kycVerifiedAt        DateTime?
+  kycData              Json?    // Structured KYC response data
+  
+  // Full Audit Trail for SEC Compliance
+  ipAddress            String
+  userAgent            String
+  sessionId            String?  // Browser session tracking
+  geoLocation          String?  // Derived from IP
+  completedSteps       Json?    // Track wizard progress
+  
+  // Timestamps
+  startedAt            DateTime @default(now())  // When wizard was started
+  completedAt          DateTime?                 // When fully completed
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([investorId])
+  @@index([kycStatus])
+  @@index([method])
+  @@index([createdAt])
+}
+
+// Entity Mode: Determines whether this is a Fund (LP/GP with units/calls) or Startup (cap table with shares)
+enum EntityMode {
+  FUND      // Traditional fund: units, capital calls, distributions, K1s
+  STARTUP   // Startup equity: shares, price per share, vesting, cap table
+}
+
+model Fund {
+  id                String   @id @default(cuid())
+  teamId            String
+  team              Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  name              String
+  description       String?
+  style             String?  // e.g., "Staged Commitments", "Traditional", "Evergreen"
+  
+  // Entity Mode: FUND (default) or STARTUP for cap table features
+  entityMode        EntityMode @default(FUND)
+  
+  targetRaise       Decimal  @db.Decimal(18, 2)
+  minimumInvestment Decimal  @db.Decimal(18, 2)
+  currentRaise      Decimal  @default(0) @db.Decimal(18, 2)
+  aumTarget         Decimal? @db.Decimal(18, 2)  // Optional AUM goal
+  
+  status            String   @default("RAISING")
+  closingDate       DateTime?
+  
+  ndaGateEnabled    Boolean  @default(true)
+  
+  // Initial Closing Threshold (gates capital calls until met)
+  initialThresholdEnabled Boolean  @default(false)
+  initialThresholdAmount  Decimal? @db.Decimal(18, 2)  // e.g., $1.8M before first capital use
+  
+  // Full Authorized Amount (for progress tracking, not gating)
+  fullAuthorizedAmount    Decimal? @db.Decimal(18, 2)  // e.g., $9.55M raise target
+  
+  // Legacy: Configurable Capital Call Threshold (deprecated, use initialThreshold*)
+  capitalCallThresholdEnabled Boolean  @default(false)
+  capitalCallThreshold        Decimal? @db.Decimal(18, 2)
+  
+  // Call Frequency Configuration
+  callFrequency     String   @default("AS_NEEDED")  // AS_NEEDED, MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL
+  
+  // Staged Commitments
+  stagedCommitmentsEnabled Boolean @default(false)
+  
+  // Flexible Custom Settings (JSON for extensibility)
+  customSettings    Json?
+  
+  // SEC Form D Compliance
+  formDFilingDate     DateTime?  // Date Form D was filed with SEC
+  formDAmendmentDue   DateTime?  // Annual amendment due date (1 year after initial)
+  formDReminderSent   Boolean   @default(false)  // Reminder notification sent
+  stateNoticesRequired Json?    // Array of { state, filed, filedAt, dueDate }
+  
+  // Audit and Tracking
+  createdBy         String?  // GP User ID who created the fund
+  audit             Json?    // Changes log: [{ timestamp, userId, action, previousValue, newValue }]
+  
+  flatModeEnabled   Boolean  @default(false)
+  
+  investments       Investment[]
+  capitalCalls      CapitalCall[]
+  distributions     Distribution[]
+  reports           FundReport[]
+  aggregate         FundAggregate?
+  investors         Investor[]
+  pricingTiers      FundPricingTier[]
+  subscriptions     Subscription[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([createdBy])
+}
+
+model FundAggregate {
+  id                String   @id @default(cuid())
+  fundId            String   @unique
+  fund              Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  
+  // Financial Aggregates
+  totalInbound      Decimal  @default(0) @db.Decimal(15, 2)  // Capital calls received
+  totalOutbound     Decimal  @default(0) @db.Decimal(15, 2)  // Distributions paid
+  totalCommitted    Decimal  @default(0) @db.Decimal(15, 2)  // From subscriptions
+  currentBalance    Json?    // Breakdowns by type/period
+  
+  // Initial Closing Threshold (gates capital calls)
+  initialThresholdEnabled Boolean  @default(false)
+  initialThresholdAmount  Decimal? @db.Decimal(15, 2)  // e.g., $1.8M
+  initialThresholdMet     Boolean  @default(false)     // True when totalCommitted >= initialThresholdAmount
+  initialThresholdMetAt   DateTime?                    // When threshold was first met
+  
+  // Full Authorized Amount Progress (tracking only, not gating)
+  fullAuthorizedAmount    Decimal? @db.Decimal(15, 2)  // e.g., $9.55M
+  fullAuthorizedProgress  Decimal  @default(0) @db.Decimal(5, 2)  // Percentage (0-100)
+  
+  // Legacy: Configurable Threshold (deprecated, use initialThreshold*)
+  thresholdEnabled  Boolean  @default(false)
+  thresholdAmount   Decimal? @db.Decimal(15, 2)
+  
+  // Audit Trail for Changes
+  audit             Json?    // Array of { ip, timestamp, userAgent, action, previousValue, newValue }
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([fundId])
+}
+
+model Investment {
+  id                String   @id @default(cuid())
+  fundId            String
+  fund              Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  investorId        String
+  investor          Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  
+  commitmentAmount  Decimal  @db.Decimal(18, 2)
+  fundedAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  status            String   @default("COMMITTED")
+  subscriptionDate  DateTime?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([fundId, investorId])
+  @@index([fundId])
+  @@index([investorId])
+}
+
+model CapitalCall {
+  id              String   @id @default(cuid())
+  fundId          String
+  fund            Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  
+  callNumber      Int
+  amount          Decimal  @db.Decimal(18, 2)
+  purpose         String?
+  dueDate         DateTime
+  status          String   @default("PENDING")
+  
+  responses       CapitalCallResponse[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([fundId])
+}
+
+model CapitalCallResponse {
+  id              String      @id @default(cuid())
+  capitalCallId   String
+  capitalCall     CapitalCall @relation(fields: [capitalCallId], references: [id], onDelete: Cascade)
+  investorId      String
+  investor        Investor    @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  
+  amountDue       Decimal     @db.Decimal(18, 2)
+  amountPaid      Decimal     @default(0) @db.Decimal(18, 2)
+  status          String      @default("PENDING")
+  paidAt          DateTime?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([capitalCallId, investorId])
+  @@index([capitalCallId])
+  @@index([investorId])
+}
+
+model Distribution {
+  id              String   @id @default(cuid())
+  fundId          String
+  fund            Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  
+  distributionNumber Int
+  totalAmount     Decimal  @db.Decimal(18, 2)
+  distributionType String  @default("DIVIDEND")
+  distributionDate DateTime
+  status          String   @default("PENDING")
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([fundId])
+}
+
+model FundReport {
+  id              String   @id @default(cuid())
+  fundId          String
+  fund            Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  
+  reportType      String
+  reportPeriod    String
+  title           String
+  fileUrl         String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([fundId])
+}
+
+model Subscription {
+  id                  String   @id @default(cuid())
+  investorId          String
+  fundId              String?
+  fund                Fund?    @relation(fields: [fundId], references: [id], onDelete: SetNull)
+  signatureDocumentId String   @unique
+  
+  amount              Decimal  @db.Decimal(18, 2)
+  units               Int?
+  pricingTierId       String?
+  pricingTier         FundPricingTier? @relation(fields: [pricingTierId], references: [id], onDelete: SetNull)
+  tierBreakdown       Json?
+  status              String   @default("PENDING")
+  
+  signedAt            DateTime?
+  ipAddress           String?
+  userAgent           String?
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([investorId])
+  @@index([fundId])
+  @@index([signatureDocumentId])
+  @@index([status])
+  @@index([pricingTierId])
+  @@index([fundId, status])  // Composite index for capital tracking aggregates
+  @@index([fundId, status, amount])  // Composite index for AUM calculations
+}
+
+model FundPricingTier {
+  id              String   @id @default(cuid())
+  fundId          String
+  fund            Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  
+  tranche         Int
+  pricePerUnit    Decimal  @db.Decimal(18, 2)
+  unitsAvailable  Int
+  unitsTotal      Int
+  
+  isActive        Boolean  @default(true)
+  
+  subscriptions   Subscription[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([fundId, tranche])
+  @@index([fundId])
+  @@index([isActive])
+}
+
+model InvestorNote {
+  id              String   @id @default(cuid())
+  investorId      String
+  investor        Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  teamId          String
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  content         String   @db.Text
+  isFromInvestor  Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+
+  @@index([investorId])
+  @@index([teamId])
+}
+
+// Plaid Bank Account Link
+model BankLink {
+  id                String   @id @default(cuid())
+  investorId        String
+  investor          Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  
+  // Plaid tokens and identifiers
+  plaidItemId       String   @unique
+  plaidAccessToken  String   // Encrypted access token
+  plaidAccountId    String   // Selected account ID
+  
+  // Account details (cached from Plaid)
+  institutionId     String?
+  institutionName   String?
+  accountName       String?
+  accountMask       String?  // Last 4 digits
+  accountType       String?  // checking, savings
+  accountSubtype    String?
+  
+  // Status
+  status            String   @default("ACTIVE")  // ACTIVE, DISCONNECTED, ERROR
+  errorCode         String?
+  errorMessage      String?
+  lastSyncAt        DateTime?
+  
+  // Plaid Transfer authorization
+  transferEnabled   Boolean  @default(false)
+  processorToken    String?  // For ACH transfers
+  
+  transactions      Transaction[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([investorId])
+  @@index([status])
+}
+
+// Transaction records for capital calls and distributions
+model Transaction {
+  id                String   @id @default(cuid())
+  investorId        String
+  investor          Investor @relation(fields: [investorId], references: [id], onDelete: Restrict)
+  bankLinkId        String?
+  bankLink          BankLink? @relation(fields: [bankLinkId], references: [id], onDelete: SetNull)
+  
+  // Transaction details
+  type              String   // CAPITAL_CALL, DISTRIBUTION
+  amount            Decimal  @db.Decimal(18, 2)
+  currency          String   @default("USD")
+  description       String?
+  
+  // Related records
+  capitalCallId     String?
+  distributionId    String?
+  fundId            String?
+  
+  // Plaid Transfer details
+  plaidTransferId   String?  @unique
+  transferType      String?  // ach_debit, ach_credit
+  
+  // Status tracking
+  status            String   @default("PENDING")  // PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
+  statusMessage     String?
+  
+  // Timestamps
+  initiatedAt       DateTime @default(now())
+  processedAt       DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  
+  // Audit trail (506(c) compliance)
+  ipAddress         String?
+  userAgent         String?
+  initiatedBy       String?  // userId of GP who initiated
+  auditTrail        Json?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([investorId])
+  @@index([bankLinkId])
+  @@index([status])
+  @@index([type])
+  @@index([plaidTransferId])
+  @@index([fundId, status, type])  // Composite index for AUM calculations by fund
+  @@index([fundId, type, completedAt])  // Composite index for time-based AUM reporting
+  @@index([investorId, type, status])  // Composite index for investor transaction summaries
+}
